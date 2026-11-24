@@ -1,0 +1,58 @@
+# WENITE – lokales Umami zum Testen (Windows ARM64 / Docker Desktop)
+# Start:   docker compose -f wenite/docker-compose.yml up -d
+# Stop:    docker compose -f wenite/docker-compose.yml down
+# Reset:   docker compose -f wenite/docker-compose.yml down -v   (löscht alle lokalen Daten)
+# Aufruf:  http://localhost:3000  – Login admin / umami (sofort ändern)
+#
+# Nutzt das offizielle Image (amd64 + arm64). Die lokalen Werte stehen unten direkt drin,
+# weil es nur eine Testumgebung ist. Für Produktion: wenite/example.env + Vercel.
+
+name: wnt-analytics-local
+
+services:
+  umami:
+    image: ghcr.io/umami-software/umami:latest
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://umami:umami@db:5432/umami
+      # Nur lokal! Für Vercel eigene Werte erzeugen.
+      APP_SECRET: 4c6f63616c2d6f6e6c792d6e6f742d666f722d70726f64756374696f6e2d2d21
+      TWO_FACTOR_ENCRYPTION_KEY: 6c6f63616c2d74776f2d666163746f722d6b65792d6e6f742d70726f64212121
+      TRACKER_SCRIPT_NAME: wnt.js
+      COLLECT_API_ENDPOINT: /api/wnt
+      SALT_ROTATION: daily
+      DISABLE_TELEMETRY: 1
+      DISABLE_UPDATES: 1
+      DEFAULT_LOCALE: de-DE
+    depends_on:
+      db:
+        condition: service_healthy
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/heartbeat || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  db:
+    # Supabase läuft auf Postgres 15/17 – 16 ist lokal ein guter Mittelweg
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: umami
+      POSTGRES_USER: umami
+      POSTGRES_PASSWORD: umami
+    ports:
+      - "5433:5432"   # 5433 außen, damit es nicht mit einem lokalen Postgres kollidiert
+    volumes:
+      - umami-local-db:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  umami-local-db:
